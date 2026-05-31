@@ -49,7 +49,6 @@ export interface EventsEnvelope {
 }
 
 export interface Filters {
-  dayKey: string | null;
   categoryId: string | null;
   venueName: string | null;
   arenaName: string | null;

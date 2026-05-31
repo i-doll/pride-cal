@@ -1,30 +1,29 @@
 import type { AppState } from '../lib/types';
-import { t } from '../i18n/strings';
 import { dayKeyToIso, fmtChip } from '../util/datetime';
 import { escapeHtml } from '../util/dom';
 
-export function renderDateStrip(s: AppState, counts: Map<string, number>): string {
-  const allChip = `<button type="button" class="daychip${
-    !s.filters.dayKey ? ' is-active' : ''
-  }" data-action="set-day" data-day="" aria-pressed="${!s.filters.dayKey}">
-      <span class="daychip__wd">${escapeHtml(t(s.lang, 'allDays'))}</span>
-      <span class="daychip__count">${s.events.length}</span>
-    </button>`;
+export interface StripDay {
+  dayKey: string;
+  count: number;
+}
 
-  const chips = s.facets.days
+/**
+ * Sticky day navigator. Chips jump the agenda to a day (not a filter); `viewingDay` is the
+ * scroll-spy highlight for the day currently in view. Only days present in the (filtered)
+ * agenda are shown, so every chip has a scroll target.
+ */
+export function renderDateStrip(s: AppState, days: StripDay[], viewingDay: string | null): string {
+  const chips = days
     .map((d) => {
-      const c = counts.get(d.dayKey) ?? 0;
       const { weekday, day } = fmtChip(dayKeyToIso(d.dayKey), s.lang);
-      const active = s.filters.dayKey === d.dayKey;
-      const dim = c === 0 ? ' is-dim' : '';
-      return `<button type="button" class="daychip${active ? ' is-active' : ''}${dim}"
-        data-action="set-day" data-day="${escapeHtml(d.dayKey)}" aria-pressed="${active}"${c === 0 ? ' disabled' : ''}>
+      const active = d.dayKey === viewingDay;
+      return `<button type="button" class="daychip${active ? ' is-active' : ''}"
+        data-action="goto-day" data-day="${escapeHtml(d.dayKey)}" aria-current="${active ? 'date' : 'false'}">
         <span class="daychip__wd">${escapeHtml(weekday)}</span>
         <span class="daychip__day">${escapeHtml(day)}</span>
-        <span class="daychip__count">${c}</span>
+        <span class="daychip__count">${d.count}</span>
       </button>`;
     })
     .join('');
-
-  return `<div class="datestrip__inner">${allChip}${chips}</div>`;
+  return `<div class="datestrip__inner">${chips}</div>`;
 }
