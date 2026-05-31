@@ -45,3 +45,8 @@ export function fmtDate(iso: string, lang: Lang): string {
 export function dayKeyToIso(dayKey: string): string {
   return `${dayKey}T12:00:00.000Z`;
 }
+
+/** Today's date as a 'YYYY-MM-DD' day key in Europe/Oslo. */
+export function osloTodayKey(): string {
+  return fmt('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}

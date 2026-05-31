@@ -17,12 +17,6 @@ export function groupByDay(events: PrideEvent[]): DayGroup[] {
     .map(([dayKey, evs]) => ({ dayKey, events: evs }));
 }
 
-export function dayCounts(events: PrideEvent[]): Map<string, number> {
-  const m = new Map<string, number>();
-  for (const e of events) m.set(e.dayKey, (m.get(e.dayKey) ?? 0) + 1);
-  return m;
-}
-
 /** Derive filter option lists + festival days from the full event set (computed once). */
 export function buildFacets(events: PrideEvent[]): Facets {
   const cats = new Map<string, { id: string; no: string; en: string }>();

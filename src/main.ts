@@ -1,12 +1,13 @@
 import './styles/main.css';
-import type { AppState, Lang, PrideEvent } from './lib/types';
+import type { AppState, DayMeta, Lang, PrideEvent } from './lib/types';
 import { loadEvents } from './data/load';
 import { loadFeedIndex } from './export/feeds';
 import { createStore } from './state/store';
-import { applyFilters, emptyFilters, withoutDay } from './state/filters';
-import { buildFacets, dayCounts, groupByDay } from './state/grouping';
+import { applyFilters, emptyFilters } from './state/filters';
+import { buildFacets, groupByDay } from './state/grouping';
 import { loadSelection, persistSelection } from './state/selection';
 import { detectLang, saveLang } from './i18n/lang';
+import { osloTodayKey } from './util/datetime';
 import { t } from './i18n/strings';
 import { downloadIcs } from './export/download';
 import { delegate, prefersReducedMotion, qs, qsa } from './util/dom';
@@ -43,8 +44,11 @@ function initialState(): AppState {
 let shellMounted = false;
 let renderedLang: Lang | null = null;
 let forceFilterBar = false;
-let pendingScrollDay: string | null = null;
 let modalWasOpen = false;
+let viewingDay: string | null = null; // scroll-spy: day currently in view (not a filter)
+let didInitialScroll = false;
+let suppressSpyUntil = 0; // ignore scroll-spy briefly after a programmatic jump
+let spyTicking = false;
 
 function render(s: AppState): void {
   document.documentElement.lang = s.lang;
@@ -82,7 +86,8 @@ function render(s: AppState): void {
 
   const visible = applyFilters(s.events, s.filters);
   const groups = groupByDay(visible);
-  setHtml('#datestrip', renderDateStrip(s, dayCounts(applyFilters(s.events, withoutDay(s.filters)))));
+  const stripDays = groups.map((g) => ({ dayKey: g.dayKey, count: g.events.length }));
+  setHtml('#datestrip', renderDateStrip(s, stripDays, viewingDay));
   setHtml('#agenda', renderAgenda(s, groups, visible.length));
   setHtml('#exportbar', renderExportBar(s));
   setHtml('#subscribe', renderSubscribe(s));
@@ -99,10 +104,26 @@ function render(s: AppState): void {
   if (s.subscribeOpen && !modalWasOpen) qs<HTMLElement>('.modal__panel')?.focus();
   modalWasOpen = s.subscribeOpen;
 
-  if (pendingScrollDay) {
-    const target = qs(`#day-${cssEscape(pendingScrollDay)}`);
-    pendingScrollDay = null;
-    target?.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+  // Keep the sticky offsets (header + strip heights) accurate; they drive the pinned strip,
+  // the sticky day headers, and scroll-padding.
+  updateStickyOffsets();
+
+  if (!didInitialScroll && groups.length) {
+    // On first load, jump to the next festival day with events (today or later).
+    didInitialScroll = true;
+    viewingDay = nextEventDayKey(s.facets.days);
+    if (viewingDay) {
+      suppressSpyUntil = performance.now() + 300; // hold the highlight through the jump settle
+      qs(`#day-${cssEscape(viewingDay)}`)?.scrollIntoView({ block: 'start', behavior: 'auto' });
+    }
+    syncActiveChip(viewingDay);
+  } else {
+    // After a filter/lang re-render, re-derive the day in view from scroll position.
+    requestAnimationFrame(() => {
+      const d = computeViewingDay();
+      if (d) viewingDay = d;
+      syncActiveChip(viewingDay);
+    });
   }
 }
 
@@ -146,6 +167,80 @@ const escape = (s: string): string =>
 
 const cssEscape = (s: string): string =>
   typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(s) : s.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+
+// ---- sticky date-strip / scroll-spy ------------------------------------------
+
+/** Measure the pinned header + strip heights into CSS vars (drives sticky offsets). */
+function updateStickyOffsets(): void {
+  const root = document.documentElement;
+  const header = qs<HTMLElement>('#app-header');
+  const strip = qs<HTMLElement>('#datestrip');
+  if (header) root.style.setProperty('--header-h', `${header.offsetHeight}px`);
+  if (strip) root.style.setProperty('--strip-h', `${strip.offsetHeight}px`);
+}
+
+/** The day section currently sitting at the top of the content area (below the pinned strip). */
+function computeViewingDay(): string | null {
+  const sections = qsa<HTMLElement>('#agenda .day');
+  if (!sections.length) return null;
+  const strip = qs('#datestrip');
+  // Detection line sits a little below the pinned strip — past where scroll-padding lands a
+  // jumped-to day (strip.bottom + scroll-padding gap) — so the day at the top counts as active.
+  const pinLine = (strip ? strip.getBoundingClientRect().bottom : 0) + 16;
+  let active = sections[0].dataset.day ?? null;
+  for (const sec of sections) {
+    if (sec.getBoundingClientRect().top <= pinLine) active = sec.dataset.day ?? active;
+    else break; // sections are in DOM order, top-to-bottom
+  }
+  return active;
+}
+
+/** Highlight the active chip and keep it scrolled into view within the strip. */
+function syncActiveChip(day: string | null): void {
+  for (const chip of qsa<HTMLElement>('#datestrip .daychip')) {
+    const on = chip.dataset.day === day;
+    chip.classList.toggle('is-active', on);
+    chip.setAttribute('aria-current', on ? 'date' : 'false');
+  }
+  if (!day) return;
+  qs<HTMLElement>(`#datestrip .daychip[data-day="${cssEscape(day)}"]`)?.scrollIntoView({
+    block: 'nearest',
+    inline: 'center',
+    behavior: 'auto',
+  });
+}
+
+function onScroll(): void {
+  if (spyTicking) return;
+  spyTicking = true;
+  requestAnimationFrame(() => {
+    spyTicking = false;
+    if (performance.now() < suppressSpyUntil) return;
+    const day = computeViewingDay();
+    if (day && day !== viewingDay) {
+      viewingDay = day;
+      syncActiveChip(day);
+    }
+  });
+}
+
+/** First festival day with events that is today or later; else the last day. */
+function nextEventDayKey(days: DayMeta[]): string | null {
+  if (!days.length) return null;
+  const today = osloTodayKey();
+  for (const d of days) if (d.dayKey >= today) return d.dayKey;
+  return days[days.length - 1].dayKey;
+}
+
+function jumpToDay(day: string): void {
+  viewingDay = day;
+  suppressSpyUntil = performance.now() + 700; // let the smooth scroll settle before spy resumes
+  syncActiveChip(day);
+  qs(`#day-${cssEscape(day)}`)?.scrollIntoView({
+    behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    block: 'start',
+  });
+}
 
 // ---- state mutations ----------------------------------------------------------
 
@@ -191,12 +286,9 @@ function wire(): void {
         store.set({ lang });
         break;
       }
-      case 'set-day': {
-        const day = el.dataset.day || null;
-        store.update((s) => ({ filters: { ...s.filters, dayKey: day } }));
-        if (day) pendingScrollDay = day;
+      case 'goto-day':
+        jumpToDay(el.dataset.day!);
         break;
-      }
       case 'expand': {
         const id = el.dataset.id!;
         store.update((s) => ({ expandedId: s.expandedId === id ? null : id }));
@@ -260,6 +352,13 @@ function wire(): void {
     const s = store.get();
     if (s.subscribeOpen) store.set({ subscribeOpen: false });
     else if (s.expandedId) store.set({ expandedId: null });
+  });
+
+  // Scroll-spy: highlight the day currently in view; keep sticky offsets fresh on resize.
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', () => {
+    updateStickyOffsets();
+    onScroll();
   });
 }
 

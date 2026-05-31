@@ -22,7 +22,7 @@ function renderDay(s: AppState, g: DayGroup): string {
   const allSelected = total > 0 && selectedInDay === total;
 
   return `
-    <section class="day" id="day-${escapeHtml(g.dayKey)}">
+    <section class="day" id="day-${escapeHtml(g.dayKey)}" data-day="${escapeHtml(g.dayKey)}">
       <div class="day__head">
         <h2 class="day__title">${escapeHtml(fmtDayHeading(dayKeyToIso(g.dayKey), s.lang))}</h2>
         <label class="day__selectall">
