@@ -170,12 +170,19 @@ const cssEscape = (s: string): string =>
 
 // ---- sticky date-strip / scroll-spy ------------------------------------------
 
-/** Measure the pinned header + strip heights into CSS vars (drives sticky offsets). */
+/** Measure the pinned header + filter bar + strip heights into CSS vars (drives sticky offsets). */
 function updateStickyOffsets(): void {
   const root = document.documentElement;
   const header = qs<HTMLElement>('#app-header');
+  const filterbar = qs<HTMLElement>('#filterbar');
   const strip = qs<HTMLElement>('#datestrip');
   if (header) root.style.setProperty('--header-h', `${header.offsetHeight}px`);
+  if (filterbar) {
+    // The filter bar only pins on roomy viewports (see main.css @media). When it isn't
+    // sticky it scrolls away, so it must not push the strip's pinned offset down.
+    const pinned = getComputedStyle(filterbar).position === 'sticky';
+    root.style.setProperty('--filter-h', pinned ? `${filterbar.offsetHeight}px` : '0px');
+  }
   if (strip) root.style.setProperty('--strip-h', `${strip.offsetHeight}px`);
 }
 
@@ -203,11 +210,16 @@ function syncActiveChip(day: string | null): void {
     chip.setAttribute('aria-current', on ? 'date' : 'false');
   }
   if (!day) return;
-  qs<HTMLElement>(`#datestrip .daychip[data-day="${cssEscape(day)}"]`)?.scrollIntoView({
-    block: 'nearest',
-    inline: 'center',
-    behavior: 'auto',
-  });
+  // Center the active chip within the strip's OWN horizontal scroll. We can't use
+  // scrollIntoView here: it scrolls every ancestor scroller including the document,
+  // and Chromium yanks the page toward the top on every scroll-spy tick.
+  const strip = qs<HTMLElement>('#datestrip');
+  const chip = qs<HTMLElement>(`#datestrip .daychip[data-day="${cssEscape(day)}"]`);
+  if (!strip || !chip) return;
+  const stripRect = strip.getBoundingClientRect();
+  const chipRect = chip.getBoundingClientRect();
+  const delta = chipRect.left + chipRect.width / 2 - (stripRect.left + stripRect.width / 2);
+  strip.scrollLeft += delta;
 }
 
 function onScroll(): void {

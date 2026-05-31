@@ -36,8 +36,8 @@
 }
 
 html {
-  /* keep day headers clear of the pinned header + date strip when scrolled to */
-  scroll-padding-top: calc(var(--header-h, 60px) + var(--strip-h, 76px) + 10px);
+  /* keep day headers clear of the pinned header + filter bar + date strip when scrolled to */
+  scroll-padding-top: calc(var(--header-h, 60px) + var(--filter-h, 0px) + var(--strip-h, 76px) + 10px);
 }
 
 body {
@@ -191,6 +191,21 @@ a {
   gap: 8px;
   padding: 8px 0;
 }
+/* Pin the filters with the date strip only where there's vertical room for them.
+   On phones / short viewports the full bar (122px) would swallow the screen, so it
+   scrolls away and just the date strip stays pinned. JS mirrors this into --filter-h. */
+@media (min-width: 700px) and (min-height: 740px) {
+  .filterbar {
+    position: sticky;
+    top: var(--header-h, 60px);
+    z-index: 28;
+    margin: 0 -16px;
+    padding: 8px 16px;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    backdrop-filter: saturate(1.4) blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+}
 .filterbar__row {
   display: flex;
   gap: 8px;
@@ -286,7 +301,7 @@ input[type='search'] {
 /* ---- date strip ---- */
 .datestrip {
   position: sticky;
-  top: var(--header-h, 60px);
+  top: calc(var(--header-h, 60px) + var(--filter-h, 0px));
   z-index: 25;
   margin: 0 -16px;
   padding: 6px 0;
@@ -373,7 +388,7 @@ input[type='search'] {
 }
 .day__head {
   position: sticky;
-  top: calc(var(--header-h, 60px) + var(--strip-h, 76px));
+  top: calc(var(--header-h, 60px) + var(--filter-h, 0px) + var(--strip-h, 76px));
   z-index: 10;
   display: flex;
   align-items: center;
