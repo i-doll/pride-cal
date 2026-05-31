@@ -6,6 +6,7 @@
   "description": "Browse Oslo Pride 2026 and bulk-export events to your own calendar.",
   "scripts": {
     "fetch:events": "tsx build/generate.ts",
+    "predev": "node -e \"require('node:fs').existsSync('public/events.json') || process.exit(1)\" || npm run fetch:events",
     "dev": "vite",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test": "vitest run",
