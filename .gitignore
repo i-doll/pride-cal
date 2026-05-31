@@ -1,0 +1,13 @@
+node_modules
+dist
+*.local
+.DS_Store
+
+# Internal planning notes (kept out of the public repo)
+tasks/
+
+# Generated calendar feeds (deterministically rebuilt from events.json at build time)
+public/feeds/
+
+# Keep the committed events.json snapshot as an offline/dev/last-good fallback
+!public/events.json

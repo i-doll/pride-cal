@@ -1,0 +1,23 @@
+{
+  "name": "pride-cal",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Browse Oslo Pride 2026 and bulk-export events to your own calendar.",
+  "scripts": {
+    "fetch:events": "tsx build/generate.ts",
+    "dev": "vite",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "test": "vitest run",
+    "prebuild": "npm run fetch:events",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "vitest": "^2.1.8"
+  }
+}
